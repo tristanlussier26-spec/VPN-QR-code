@@ -43,6 +43,10 @@ sudo ./install-pi.sh 8080         # option B
 
 N'ouvre pas ce port sur Internet. La page n'envoie rien à un serveur, mais elle n'a pas de mot de passe : garde-la sur ton réseau local (ou derrière ton VPN).
 
+## Personnaliser la carte
+
+Dans la section « Personnaliser la carte » : nom du VPN, couleur, vitesse affichée (vide = cachée), ton contact (nom, téléphone ou courriel) et les règles (une par ligne). Tout est retenu dans ton navigateur et s'applique aux cartes, au PDF et au message texte. Le bouton « Remettre par défaut » remet les valeurs d'origine.
+
 ## Utilisation
 
 1. Ouvre la page : sur ton Pi (`http://IP-DU-PI:8080`), sur GitHub Pages, ou `index.html` directement dans ton navigateur.

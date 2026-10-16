@@ -50,7 +50,7 @@ button:hover{filter:brightness(1.06)}
 
 /* Carte = billet avec talon perforé */
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:grid}
-.card-top{background:var(--accent);color:var(--accent-ink);padding:14px 18px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.card-top{background:var(--cc,var(--accent));color:var(--cc-ink,var(--accent-ink));padding:14px 18px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
 .card-top b{font-size:18px;font-weight:800;letter-spacing:-.01em}
 .card-top span{font-family:var(--mono);font-size:12px;opacity:.9}
 .card-body{padding:16px 18px;display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;align-items:start}
@@ -66,7 +66,10 @@ dd{margin:0;font-family:var(--mono);overflow-wrap:anywhere;font-variant-numeric:
 .steps{padding:12px 18px 6px;margin:0;display:grid;gap:6px;font-size:13px;counter-reset:s;list-style:none}
 .steps li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;counter-increment:s}
 .steps li::before{content:counter(s);font-family:var(--mono);font-weight:600;color:var(--accent);border:1px solid var(--line);border-radius:50%;width:22px;height:22px;display:grid;place-items:center;font-size:11px}
-.rules{padding:6px 18px 14px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px}
+.rules{margin:0;padding:6px 18px 14px 34px;font-size:12px;color:var(--muted);display:grid;gap:2px}
+textarea.plain{font-family:var(--display);font-size:14px;min-height:110px}
+input[type=color]{height:42px;padding:4px;cursor:pointer}
+.saved{color:var(--muted);font-size:12px;align-self:center}
 .chip{border:1px solid var(--line);border-radius:999px;padding:2px 9px}
 .card-foot{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 16px}
 .card-foot button{padding:6px 10px;font-size:13px}
@@ -95,8 +98,15 @@ dd{margin:0;font-family:var(--mono);overflow-wrap:anywhere;font-variant-numeric:
 
   <div class="grid">
     <form class="panel" id="f" autocomplete="off">
-      <h2>Ton VPN</h2>
-      <label for="vpnname">Nom du VPN <small>(affiché sur toutes les cartes)</small><input id="vpnname" maxlength="32"></label>
+      <h2>Personnaliser la carte</h2>
+      <label for="vpnname">Nom du VPN <small>(titre de la carte)</small><input id="vpnname" maxlength="32"></label>
+      <div class="row">
+        <label for="color" style="flex:0 1 110px">Couleur<input id="color" type="color"></label>
+        <label for="speed">Vitesse affichée <small>(vide = cachée)</small><input id="speed" maxlength="30"></label>
+      </div>
+      <label for="contact">Ton contact <small>(nom, téléphone ou courriel)</small><input id="contact" maxlength="90" placeholder="Ton prénom"></label>
+      <label for="rules">Règles <small>(une par ligne)</small><textarea id="rules" class="plain" spellcheck="true"></textarea></label>
+      <div class="row"><button type="button" id="reset">Remettre par défaut</button><small class="saved">Retenu dans ce navigateur.</small></div>
       <h2>Nouvelle licence</h2>
       <div class="drop" id="drop">
         <input type="file" id="file" accept=".conf,text/plain" hidden>
@@ -119,13 +129,12 @@ dd{margin:0;font-family:var(--mono);overflow-wrap:anywhere;font-variant-numeric:
           <option value="tous">Les deux / je sais pas</option>
         </select>
       </label>
-      <label for="contact">Ton contact <small>(affiché sur la carte)</small><input id="contact" placeholder="Ton prénom"></label>
       <div class="row">
         <button class="primary" type="submit">Créer la carte</button>
         <button type="button" id="clear">Vider le formulaire</button>
       </div>
       <div class="msg" id="msg" role="status"></div>
-      <p class="note">Rien n'est enregistré : les cartes disparaissent quand tu fermes la page. Le code QR contient la clé privée du client, alors traite chaque carte comme un mot de passe et envoie-la seulement à la bonne personne.</p>
+      <p class="note">Seule la personnalisation est retenue dans ce navigateur. Les cartes, elles, disparaissent quand tu fermes la page. Le code QR contient la clé privée du client, alors traite chaque carte comme un mot de passe et envoie-la seulement à la bonne personne.</p>
     </form>
 
     <section aria-label="Cartes générées" style="display:grid;gap:14px;min-width:0">
@@ -142,6 +151,29 @@ dd{margin:0;font-family:var(--mono);overflow-wrap:anywhere;font-variant-numeric:
 const $ = s => document.querySelector(s);
 const sheet = $("#sheet");
 let count = 0, cards = [];
+
+/* Personnalisation : retenue dans ce navigateur seulement */
+const DEFAULTS = {
+  name: "Mon VPN", color: "#2747d9", speed: "100 Mb/s max", contact: "",
+  rules: ["Les pubs et traqueurs sont bloqués automatiquement.",
+          "Pas de téléchargement illégal : tout passe par ma connexion Internet, c'est moi qui suis responsable.",
+          "Ne partage pas ce code, il est personnel."]
+};
+let S = structuredClone(DEFAULTS);
+try {
+  const saved = JSON.parse(localStorage.getItem("carteVpn") || "null");
+  if(saved) Object.assign(S, saved);
+  else { const old = localStorage.getItem("vpnName"); if(old) S.name = old; }
+} catch {}
+function vpnName(){ return (S.name || "").trim() || DEFAULTS.name; }
+function contactTxt(){ return (S.contact || "").trim() || "la personne qui t'a prêté l'accès"; }
+function rulesList(){ return (S.rules || []).map(r => r.trim()).filter(Boolean); }
+function hexRgb(h){ const m = /^#?([0-9a-f]{6})$/i.exec(h || ""); const n = parseInt(m ? m[1] : "2747d9", 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+function inkOn(rgb){
+  const [r,g,b] = rgb.map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+  return .2126*r + .7152*g + .0722*b > .179 ? [20,26,43] : [255,255,255];
+}
+function cardColor(){ return /^#[0-9a-f]{6}$/i.test(S.color || "") ? S.color : DEFAULTS.color; }
 
 const EXAMPLE = `[Interface]
 PrivateKey = EXEMPLE0000000000000000000000000000000000000=
@@ -196,8 +228,8 @@ function smsText(c){
   }
   return `Salut ${c.nom}! Voici ton accès à ${vpnName()}.
 ${body}
-Règles : 100 Mb/s max, les pubs sont bloquées, pas de téléchargement illégal, ne partage pas le code.
-${c.fin ? "Valide jusqu'au "+fmtDate(c.fin)+". " : ""}Un problème? Écris à ${c.contact}.`;
+Règles : ${[S.speed.trim(), ...rulesList()].filter(Boolean).join(" ; ")}
+${c.fin ? "Valide jusqu'au "+fmtDate(c.fin)+". " : ""}Un problème? Écris à ${contactTxt()}.`;
 }
 function fillSteps(el, c){
   const box = el.querySelector(".howto"); box.textContent = "";
@@ -238,18 +270,13 @@ function makeCard(c){
           <dt>Serveur</dt><dd data-f="endpoint"></dd>
           <dt>Valide</dt><dd data-f="fin"></dd>
           <dt>Appareil</dt><dd data-f="dev"></dd>
-          <dt>Vitesse</dt><dd>100 Mb/s max</dd>
+          <dt data-f="speedk">Vitesse</dt><dd data-f="speed"></dd>
         </dl>
       </div>
     </div>
     <hr class="perf">
     <div class="howto"></div>
-    <div class="rules">
-      <span class="chip">Pubs et traqueurs bloqués</span>
-      <span class="chip">Pas de téléchargement illégal</span>
-      <span class="chip">Ne partage pas ce code</span>
-      <span class="chip" data-f="contact"></span>
-    </div>
+    <ul class="rules"></ul>
     <div class="card-foot">
       <button type="button" data-a="pdf" class="pdfbtn" hidden>Télécharger en PDF</button>
       <button type="button" data-a="copy">Copier le message texte</button>
@@ -258,15 +285,13 @@ function makeCard(c){
   const top = el.querySelector(".card-top span");
   top.textContent = "Licence n° " + String(c.n).padStart(3,"0");
   if(c.example){ const t=document.createElement("span"); t.className="ex"; t.textContent="EXEMPLE"; top.after(t); }
-  el.querySelectorAll(".vpn-name").forEach(x => x.textContent = vpnName());
   el.querySelector(".name").textContent = c.nom;
   el.querySelector('[data-f="addr"]').textContent = c.p.addr || "?";
   el.querySelector('[data-f="endpoint"]').textContent = c.p.endpoint || "?";
   el.querySelector('[data-f="fin"]').textContent = fmtDate(c.fin);
-  el.querySelector('[data-f="contact"]').textContent = "Aide : " + c.contact;
   el.querySelector('[data-f="dev"]').textContent = c.device === "tous" ? "iPhone ou Android" : DEVICES[c.device].label;
   el.querySelector(".qr").innerHTML = qrSvg(c.cfg);
-  fillSteps(el, c);
+  paint(el, c);
   el.querySelector('[data-a="copy"]').addEventListener("click", async e => {
     const b = e.currentTarget, t = smsText(c);
     try { await navigator.clipboard.writeText(t); b.textContent = "Message copié"; }
@@ -283,19 +308,34 @@ function makeCard(c){
   return el;
 }
 
+/* Applique la personnalisation à une carte déjà affichée */
+function paint(el, c){
+  el.querySelector(".vpn-name").textContent = vpnName();
+  const rgb = hexRgb(cardColor());
+  el.style.setProperty("--cc", cardColor());
+  el.style.setProperty("--cc-ink", "rgb(" + inkOn(rgb).join(",") + ")");
+  const sp = S.speed.trim();
+  el.querySelector('[data-f="speed"]').textContent = sp;
+  el.querySelector('[data-f="speed"]').hidden = el.querySelector('[data-f="speedk"]').hidden = !sp;
+  const ul = el.querySelector(".rules"); ul.textContent = "";
+  [...rulesList(), "Besoin d'aide ? Écris à " + contactTxt() + "."].forEach(r => { const li = document.createElement("li"); li.textContent = r; ul.append(li); });
+  fillSteps(el, c);
+}
+
 /* ---------- PDF : une carte par page Letter, avec trait de coupe ---------- */
 let downloads = null, inClaudeNoDownloads = false;
 function pdfReady(){ return !!window.jspdf && !inClaudeNoDownloads; }
 function slug(s){ return s.normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-zA-Z0-9]+/g,"-").replace(/^-|-$/g,"").toLowerCase() || "ami"; }
 function drawCard(doc, c){
   const W = 215.9, x0 = 20, y0 = 16, w = W - 40, h = 250;
-  const blue = [39,71,217], ink = [20,26,43], grey = [91,100,122], line = [200,206,220];
+  const band = hexRgb(cardColor()), bandInk = inkOn(band), ink = [20,26,43], grey = [91,100,122], line = [200,206,220];
+  const blue = bandInk[0] === 20 ? ink : band; // couleur trop pâle : titres en encre
   doc.setLineDashPattern([2,2],0); doc.setDrawColor(...line); doc.setLineWidth(.3);
   doc.roundedRect(x0, y0, w, h, 4, 4, "S"); doc.setLineDashPattern([],0);
   doc.setFontSize(8); doc.setTextColor(...grey); doc.text("Découper ici", x0, y0 - 3);
   // bande du haut
-  doc.setFillColor(...blue); doc.roundedRect(x0, y0, w, 18, 4, 4, "F"); doc.rect(x0, y0 + 10, w, 8, "F");
-  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(18);
+  doc.setFillColor(...band); doc.roundedRect(x0, y0, w, 18, 4, 4, "F"); doc.rect(x0, y0 + 10, w, 8, "F");
+  doc.setTextColor(...bandInk); doc.setFont("helvetica","bold"); doc.setFontSize(18);
   doc.text(vpnName(), x0 + 8, y0 + 12);
   doc.setFont("courier","normal"); doc.setFontSize(10);
   doc.text("Licence n° " + String(c.n).padStart(3,"0") + (c.example ? "  EXEMPLE" : ""), x0 + w - 8, y0 + 12, {align:"right"});
@@ -310,7 +350,7 @@ function drawCard(doc, c){
   const ix = qx + qs + 10, iw = x0 + w - 8 - ix;
   doc.setTextColor(...ink); doc.setFont("helvetica","bold"); doc.setFontSize(22);
   doc.text(doc.splitTextToSize(c.nom, iw), ix, qy + 8);
-  const rows = [["IP", c.p.addr || "?"], ["SERVEUR", c.p.endpoint || "?"], ["VALIDE", fmtDate(c.fin)], ["APPAREIL", c.device === "tous" ? "iPhone ou Android" : DEVICES[c.device].label], ["VITESSE", "100 Mb/s max"]];
+  const rows = [["IP", c.p.addr || "?"], ["SERVEUR", c.p.endpoint || "?"], ["VALIDE", fmtDate(c.fin)], ["APPAREIL", c.device === "tous" ? "iPhone ou Android" : DEVICES[c.device].label], ["VITESSE", S.speed.trim()]].filter(r => r[1]);
   let yy = qy + 26;
   rows.forEach(([k,v]) => {
     doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(...grey); doc.text(k, ix, yy);
@@ -351,8 +391,10 @@ function drawCard(doc, c){
   y += 4;
   doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.text("Règles", x0 + 8, y); y += 7;
   doc.setFont("helvetica","normal"); doc.setFontSize(10);
-  ["Les pubs et traqueurs sont bloqués automatiquement.", "Pas de téléchargement illégal : tout sort avec l'adresse de la maison.", "Ne partage pas ce code, il est personnel.", "Besoin d'aide ? Écris à " + c.contact + "."]
-    .forEach(r => { doc.text("•  " + r, x0 + 10, y); y += 6; });
+  [...rulesList(), "Besoin d'aide ? Écris à " + contactTxt() + "."].forEach(r => {
+    const L = doc.splitTextToSize(r, w - 26);
+    doc.text("•", x0 + 10, y); doc.text(L, x0 + 15, y); y += L.length * 4.6 + 1.6;
+  });
   doc.setFontSize(8); doc.setTextColor(...grey);
   doc.text("Ce code QR contient une clé privée. Garde cette carte comme un mot de passe.", x0 + w/2, y0 + h - 6, {align:"center"});
 }
@@ -408,15 +450,20 @@ $("#f").addEventListener("submit", ev => {
 });
 $("#clear").addEventListener("click", () => { $("#cfg").value=""; $("#nom").value=""; $("#fin").value=""; $("#num").value=""; $("#msg").textContent=""; });
 
-/* Nom du VPN : retenu dans ce navigateur seulement */
-const DEFAULT_NAME = "Mon VPN";
-function vpnName(){ return $("#vpnname").value.trim() || DEFAULT_NAME; }
-try { $("#vpnname").value = localStorage.getItem("vpnName") || DEFAULT_NAME; } catch { $("#vpnname").value = DEFAULT_NAME; }
-$("#vpnname").addEventListener("input", () => {
-  document.querySelectorAll(".vpn-name").forEach(x => x.textContent = vpnName());
-  document.querySelectorAll(".card").forEach(el => { if(el._card) fillSteps(el, el._card); });
-  try { localStorage.setItem("vpnName", vpnName()); } catch {}
-});
+/* Formulaire de personnalisation */
+const F = { name: $("#vpnname"), color: $("#color"), speed: $("#speed"), contact: $("#contact"), rules: $("#rules") };
+function fillForm(){
+  F.name.value = S.name; F.color.value = cardColor(); F.speed.value = S.speed;
+  F.contact.value = S.contact; F.rules.value = (S.rules || []).join("\n");
+}
+function applySettings(){
+  S = { name: F.name.value, color: F.color.value, speed: F.speed.value, contact: F.contact.value, rules: F.rules.value.split("\n") };
+  document.querySelectorAll(".card").forEach(el => { if(el._card) paint(el, el._card); });
+  try { localStorage.setItem("carteVpn", JSON.stringify(S)); } catch {}
+}
+fillForm();
+Object.values(F).forEach(x => x.addEventListener("input", applySettings));
+$("#reset").addEventListener("click", () => { S = structuredClone(DEFAULTS); fillForm(); applySettings(); });
 
 /* Import du fichier .conf */
 function loadFile(f){
