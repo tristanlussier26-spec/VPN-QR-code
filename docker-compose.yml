@@ -1,0 +1,7 @@
+services:
+  cartes-vpn:
+    build: .
+    container_name: cartes-vpn
+    ports:
+      - "8080:80"
+    restart: unless-stopped

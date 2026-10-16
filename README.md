@@ -6,9 +6,46 @@ Petite page web qui génère des **cartes de licence WireGuard** à donner à te
 
 Pensé pour un serveur [wg-easy](https://github.com/wg-easy/wg-easy), mais ça marche avec n'importe quel fichier `.conf` WireGuard.
 
+## Installer sur un Raspberry Pi (accès par IP)
+
+La page est un simple fichier HTML avec ses deux librairies dans `vendor/` : elle marche **sans Internet**, sur ton réseau local.
+
+### Option A : Docker
+
+```bash
+git clone https://github.com/tristanlussier26-spec/VPN-QR-code.git
+cd VPN-QR-code
+docker compose up -d --build
+```
+
+Ouvre ensuite `http://IP-DU-PI:8080` (par exemple `http://192.168.1.50:8080`).
+Pour changer le port, modifie `8080:80` dans `docker-compose.yml`.
+
+### Option B : nginx, sans Docker
+
+```bash
+git clone https://github.com/tristanlussier26-spec/VPN-QR-code.git
+cd VPN-QR-code
+sudo ./install-pi.sh 8080
+```
+
+Le script installe nginx, copie la page dans `/var/www/cartes-vpn` et affiche l'adresse à ouvrir.
+
+### Mettre à jour
+
+```bash
+cd VPN-QR-code && git pull
+docker compose up -d --build      # option A
+sudo ./install-pi.sh 8080         # option B
+```
+
+### Sécurité
+
+N'ouvre pas ce port sur Internet. La page n'envoie rien à un serveur, mais elle n'a pas de mot de passe : garde-la sur ton réseau local (ou derrière ton VPN).
+
 ## Utilisation
 
-1. Ouvre la page (GitHub Pages ou `index.html` directement dans ton navigateur).
+1. Ouvre la page : sur ton Pi (`http://IP-DU-PI:8080`), sur GitHub Pages, ou `index.html` directement dans ton navigateur.
 2. Choisis le **nom de ton VPN** (retenu dans ton navigateur).
 3. Dans wg-easy, télécharge le fichier `.conf` du client, puis **importe-le** dans la page (ou glisse-le dessus).
    Un nom de fichier comme `license-n001.conf` remplit le numéro de licence tout seul.
@@ -23,8 +60,9 @@ Pour retirer un accès, désactive ou supprime le client dans wg-easy.
 
 ## Technique
 
-Un seul fichier HTML, sans serveur ni build.
-Librairies chargées depuis cdnjs : [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 et [jsPDF](https://github.com/parallax/jsPDF) 2.5.1.
+Un seul fichier HTML, sans build ni base de données. Les librairies sont incluses dans `vendor/` (licences MIT, fichiers de licence à côté) :
+[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 et [jsPDF](https://github.com/parallax/jsPDF) 2.5.1.
+La police vient de Google Fonts quand Internet est disponible ; sinon, la police du système prend le relais.
 
 ## Licence
 
