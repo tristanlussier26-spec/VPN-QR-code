@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <script src="vendor/qrcode.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/jszip.min.js"></script>
 <style>
 html{-webkit-text-size-adjust:100%}body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 /* Layout: formulaire à gauche, planche de cartes à droite (empilé sur cellulaire) */
@@ -145,7 +146,8 @@ input[type=color]{height:42px;padding:4px;cursor:pointer}
         <input id="find" class="find" type="search" placeholder="Chercher un nom ou un n°" aria-label="Chercher une carte" hidden>
       </div>
       <div class="row" id="bar" hidden>
-        <button type="button" class="primary" id="allpdf">Toutes les cartes en PDF</button>
+        <button type="button" class="primary" id="allpdf">Toutes les cartes (1 PDF)</button>
+        <button type="button" id="allzip">Un PDF par carte (.zip)</button>
         <span class="msg" id="pdfmsg" role="status" style="align-self:center"></span>
       </div>
       <div class="sheet" id="sheet"></div>
@@ -420,19 +422,36 @@ function drawCard(doc, c){
   doc.setFontSize(8); doc.setTextColor(...grey);
   doc.text("Ce code QR contient une clé privée. Garde cette carte comme un mot de passe.", x0 + w/2, y0 + h - 6, {align:"center"});
 }
+function pdfName(c){ return `licence-vpn-${String(c.n).padStart(3,"0")}${c.nom ? "-" + slug(c.nom) : ""}.pdf`; }
+async function saveBlob(name, blob){
+  if(downloads) return downloads.save({filename:name, data:blob});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
 async function savePdf(list){
   const out = $("#pdfmsg");
   if(!pdfReady()) { out.className = "msg err"; out.textContent = "Le PDF n'est pas disponible ici."; return; }
   const doc = new window.jspdf.jsPDF({unit:"mm", format:"letter"});
   list.slice().sort((a,b) => a.n - b.n).forEach((c,i) => { if(i) doc.addPage(); drawCard(doc, c); });
-  const name = list.length === 1 ? `licence-vpn-${String(list[0].n).padStart(3,"0")}${list[0].nom ? "-" + slug(list[0].nom) : ""}.pdf` : `licences-vpn-${list.length}-cartes.pdf`;
-  try {
-    if(downloads) await downloads.save({filename:name, data:doc.output("blob")});
-    else doc.save(name);
-    out.className = "msg ok"; out.textContent = "PDF enregistré : " + name;
-  }
+  const name = list.length === 1 ? pdfName(list[0]) : `licences-vpn-${list.length}-cartes.pdf`;
+  try { await saveBlob(name, doc.output("blob")); out.className = "msg ok"; out.textContent = "PDF enregistré : " + name; }
   catch(e){ out.className = "msg err"; out.textContent = e && e.code === "declined" ? "Téléchargement annulé." : "Le PDF n'a pas pu être enregistré."; }
 }
+async function saveZip(list){
+  const out = $("#pdfmsg");
+  if(!pdfReady() || !window.JSZip) { out.className = "msg err"; out.textContent = "Le .zip n'est pas disponible ici."; return; }
+  out.className = "msg"; out.textContent = "Préparation…";
+  const zip = new JSZip();
+  list.slice().sort((a,b) => a.n - b.n).forEach(c => {
+    const doc = new window.jspdf.jsPDF({unit:"mm", format:"letter"}); drawCard(doc, c);
+    zip.file(pdfName(c), doc.output("arraybuffer"));
+  });
+  const name = `licences-vpn-${list.length}-pdf.zip`;
+  try { await saveBlob(name, await zip.generateAsync({type:"blob"})); out.className = "msg ok"; out.textContent = `${list.length} PDF enregistrés dans ${name}`; }
+  catch(e){ out.className = "msg err"; out.textContent = e && e.code === "declined" ? "Téléchargement annulé." : "Le .zip n'a pas pu être enregistré."; }
+}
+$("#allzip").addEventListener("click", () => saveZip(cards));
 $("#allpdf").addEventListener("click", () => savePdf(cards));
 (async () => {
   // Dans Claude, le téléchargement passe par la fenêtre de confirmation ; ailleurs (GitHub Pages), jsPDF enregistre directement.

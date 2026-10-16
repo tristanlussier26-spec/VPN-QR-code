@@ -49,6 +49,7 @@ Les cartes contiennent les clés privées WireGuard de tes amis. N'ouvre **pas**
 - Chaque carte créée est enregistrée tout de suite : sur le serveur du Pi, ou dans le navigateur si la page est ouverte sans serveur (GitHub Pages, fichier local).
 - Tu les vois toutes à droite, avec une recherche par nom ou par numéro.
 - Pour chaque carte : PDF, fichier `.conf`, message texte à copier.
+- Pour tout télécharger : « Toutes les cartes (1 PDF) » fait un seul PDF (une page par carte), « Un PDF par carte (.zip) » fait un fichier séparé par carte.
 - « Retirer » demande une confirmation, puis supprime la carte pour de bon.
 
 ## Personnaliser la carte
@@ -73,7 +74,7 @@ Pour retirer un accès, désactive ou supprime le client dans wg-easy.
 ## Technique
 
 Un fichier HTML et un petit serveur Python (`server.py`, bibliothèque standard seulement), sans build ni base de données. Les librairies sont incluses dans `vendor/` (licences MIT, fichiers de licence à côté) :
-[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 et [jsPDF](https://github.com/parallax/jsPDF) 2.5.1.
+[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 et [jsPDF](https://github.com/parallax/jsPDF) 2.5.1 et [JSZip](https://github.com/Stuk/jszip) 3.10.1.
 La police vient de Google Fonts quand Internet est disponible ; sinon, la police du système prend le relais.
 
 ## Licence
