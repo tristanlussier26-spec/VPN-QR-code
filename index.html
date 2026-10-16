@@ -118,7 +118,7 @@ input[type=color]{height:42px;padding:4px;cursor:pointer}
         <textarea id="cfg" spellcheck="false" placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = 10.8.0.2/24&#10;DNS = 10.8.0.1&#10;&#10;[Peer]&#10;PublicKey = ...&#10;Endpoint = mon-vpn.duckdns.org:51820"></textarea>
       </label>
       <div class="row">
-        <label for="nom">Prêtée à<input id="nom" placeholder="Prénom"></label>
+        <label for="nom">Prêtée à <small>(optionnel)</small><input id="nom" placeholder="Prénom"></label>
         <label for="num">N° de licence <small>(auto si vide)</small><input id="num" type="number" min="1" max="999" inputmode="numeric"></label>
         <label for="fin">Jusqu'au <small>(optionnel)</small><input id="fin" type="date"></label>
       </div>
@@ -226,7 +226,7 @@ function smsText(c){
   } else {
     body = devSteps(c.device).map(([t,x],i) => `${i+1}. ${t} ${x}`).join("\n") + "\n" + DEVICES[c.device].tip;
   }
-  return `Salut ${c.nom}! Voici ton accès à ${vpnName()}.
+  return `Salut${c.nom ? " " + c.nom : ""}! Voici ton accès à ${vpnName()}.
 ${body}
 Règles : ${[S.speed.trim(), ...rulesList()].filter(Boolean).join(" ; ")}
 ${c.fin ? "Valide jusqu'au "+fmtDate(c.fin)+". " : ""}Un problème? Écris à ${contactTxt()}.`;
@@ -285,7 +285,7 @@ function makeCard(c){
   const top = el.querySelector(".card-top span");
   top.textContent = "Licence n° " + String(c.n).padStart(3,"0");
   if(c.example){ const t=document.createElement("span"); t.className="ex"; t.textContent="EXEMPLE"; top.after(t); }
-  el.querySelector(".name").textContent = c.nom;
+  el.querySelector(".name").textContent = c.nom; el.querySelector(".name").hidden = !c.nom;
   el.querySelector('[data-f="addr"]').textContent = c.p.addr || "?";
   el.querySelector('[data-f="endpoint"]').textContent = c.p.endpoint || "?";
   el.querySelector('[data-f="fin"]').textContent = fmtDate(c.fin);
@@ -349,9 +349,9 @@ function drawCard(doc, c){
   // infos
   const ix = qx + qs + 10, iw = x0 + w - 8 - ix;
   doc.setTextColor(...ink); doc.setFont("helvetica","bold"); doc.setFontSize(22);
-  doc.text(doc.splitTextToSize(c.nom, iw), ix, qy + 8);
+  if(c.nom) doc.text(doc.splitTextToSize(c.nom, iw), ix, qy + 8);
   const rows = [["IP", c.p.addr || "?"], ["SERVEUR", c.p.endpoint || "?"], ["VALIDE", fmtDate(c.fin)], ["APPAREIL", c.device === "tous" ? "iPhone ou Android" : DEVICES[c.device].label], ["VITESSE", S.speed.trim()]].filter(r => r[1]);
-  let yy = qy + 26;
+  let yy = c.nom ? qy + 26 : qy + 4;
   rows.forEach(([k,v]) => {
     doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(...grey); doc.text(k, ix, yy);
     doc.setFont("courier","normal"); doc.setFontSize(11); doc.setTextColor(...ink);
@@ -403,7 +403,7 @@ async function savePdf(list){
   if(!pdfReady()) { out.className = "msg err"; out.textContent = "Le PDF n'est pas disponible ici."; return; }
   const doc = new window.jspdf.jsPDF({unit:"mm", format:"letter"});
   list.slice().sort((a,b) => a.n - b.n).forEach((c,i) => { if(i) doc.addPage(); drawCard(doc, c); });
-  const name = list.length === 1 ? `licence-vpn-${String(list[0].n).padStart(3,"0")}-${slug(list[0].nom)}.pdf` : `licences-vpn-${list.length}-cartes.pdf`;
+  const name = list.length === 1 ? `licence-vpn-${String(list[0].n).padStart(3,"0")}${list[0].nom ? "-" + slug(list[0].nom) : ""}.pdf` : `licences-vpn-${list.length}-cartes.pdf`;
   try {
     if(downloads) await downloads.save({filename:name, data:doc.output("blob")});
     else doc.save(name);
@@ -440,12 +440,11 @@ $("#f").addEventListener("submit", ev => {
   msg.className = "msg err";
   if(!cfg) return msg.textContent = "Colle d'abord la config du client.";
   if(!/\[Interface\]/i.test(cfg) || !p.key || !p.endpoint) return msg.textContent = "Ça ne ressemble pas à une config WireGuard : il manque [Interface], PrivateKey ou Endpoint.";
-  if(!nom) return msg.textContent = "Écris le nom de la personne.";
   if(typeof qrcode === "undefined") return msg.textContent = "Le générateur de QR n'a pas chargé. Recharge la page.";
   const num = parseInt($("#num").value, 10) || 0;
   if(num && cards.some(x => !x.example && x.n === num)) return msg.textContent = `La licence n° ${num} a déjà une carte. Retire-la ou change le numéro.`;
   add(cfg, nom, $("#fin").value, $("#contact").value.trim() || "la personne qui t'a prêté l'accès", false, num, $("#device").value);
-  msg.className = "msg ok"; msg.textContent = `Carte créée pour ${nom}.`;
+  msg.className = "msg ok"; msg.textContent = nom ? `Carte créée pour ${nom}.` : "Carte créée.";
   $("#cfg").value = ""; $("#nom").value = ""; $("#fin").value = ""; $("#num").value = "";
 });
 $("#clear").addEventListener("click", () => { $("#cfg").value=""; $("#nom").value=""; $("#fin").value=""; $("#num").value=""; $("#msg").textContent=""; });
