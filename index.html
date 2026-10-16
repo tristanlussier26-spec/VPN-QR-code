@@ -83,6 +83,8 @@ input[type=color]{height:42px;padding:4px;cursor:pointer}
 .dev b{font-size:13px}
 .dev ol{margin:2px 0 0;padding-left:18px;font-size:12px}
 .devgrid + .tip{padding-left:0}
+.find{max-width:320px}
+.store{font-size:13px;color:var(--muted)}
 .ex{font-family:var(--mono);font-size:11px;background:var(--warn);color:var(--panel);padding:1px 7px;border-radius:4px}
 @media (prefers-reduced-motion:no-preference){.card{animation:in .25s ease-out}@keyframes in{from{transform:translateY(4px)}to{transform:none}}}
 </style>
@@ -134,10 +136,14 @@ input[type=color]{height:42px;padding:4px;cursor:pointer}
         <button type="button" id="clear">Vider le formulaire</button>
       </div>
       <div class="msg" id="msg" role="status"></div>
-      <p class="note">Seule la personnalisation est retenue dans ce navigateur. Les cartes, elles, disparaissent quand tu fermes la page. Le code QR contient la clé privée du client, alors traite chaque carte comme un mot de passe et envoie-la seulement à la bonne personne.</p>
+      <p class="note">Les cartes sont enregistrées : sur le serveur quand la page tourne sur ton Pi, sinon dans ce navigateur. Le code QR contient la clé privée du client, alors traite chaque carte comme un mot de passe et envoie-la seulement à la bonne personne.</p>
     </form>
 
     <section aria-label="Cartes générées" style="display:grid;gap:14px;min-width:0">
+      <div class="row" style="align-items:center;justify-content:space-between">
+        <span class="store" id="store" role="status">Chargement des cartes…</span>
+        <input id="find" class="find" type="search" placeholder="Chercher un nom ou un n°" aria-label="Chercher une carte" hidden>
+      </div>
       <div class="row" id="bar" hidden>
         <button type="button" class="primary" id="allpdf">Toutes les cartes en PDF</button>
         <span class="msg" id="pdfmsg" role="status" style="align-self:center"></span>
@@ -279,6 +285,7 @@ function makeCard(c){
     <ul class="rules"></ul>
     <div class="card-foot">
       <button type="button" data-a="pdf" class="pdfbtn" hidden>Télécharger en PDF</button>
+      <button type="button" data-a="conf" hidden>Fichier .conf</button>
       <button type="button" data-a="copy">Copier le message texte</button>
       <button type="button" data-a="del">Retirer</button>
     </div>`;
@@ -301,8 +308,23 @@ function makeCard(c){
   const pb = el.querySelector('[data-a="pdf"]');
   pb.hidden = !pdfReady();
   pb.addEventListener("click", () => savePdf([c]));
-  el.querySelector('[data-a="del"]').addEventListener("click", () => {
+  const cb = el.querySelector('[data-a="conf"]');
+  cb.hidden = c.example || !!window.claude;
+  cb.addEventListener("click", () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([c.cfg + "\n"], {type:"text/plain"}));
+    a.download = "licence-n" + String(c.n).padStart(3,"0") + ".conf";
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+  let armed = 0;
+  el.querySelector('[data-a="del"]').addEventListener("click", e => {
+    const b = e.currentTarget;
+    if(!c.example && Date.now() - armed > 4000){
+      armed = Date.now(); b.textContent = "Confirmer la suppression";
+      setTimeout(() => { if(b.isConnected) b.textContent = "Retirer"; }, 4000); return;
+    }
     cards = cards.filter(x => x !== c); el.remove(); render();
+    if(!c.example) saveCards();
   });
   el._card = c;
   return el;
@@ -426,11 +448,41 @@ function render(){
   const e = sheet.querySelector(".empty"); if(e) e.remove();
 }
 
-function add(cfg, nom, fin, contact, example=false, num=0, device="tous"){
+/* Stockage des cartes : sur le serveur du Pi s'il y en a un, sinon dans ce navigateur */
+let storeMode = "local", restoring = false;
+async function loadStored(){
+  try {
+    const r = await fetch("api/cards", {cache:"no-store"});
+    if(r.ok && (r.headers.get("content-type") || "").includes("json")){ const d = await r.json(); if(Array.isArray(d)){ storeMode = "server"; return d; } }
+  } catch {}
+  try { return JSON.parse(localStorage.getItem("cartesVpnListe") || "[]"); } catch { return []; }
+}
+function storeMsg(){
+  const n = cards.filter(c => !c.example).length;
+  $("#store").textContent = n ? `${n} carte${n > 1 ? "s" : ""} enregistrée${n > 1 ? "s" : ""} ${storeMode === "server" ? "sur le serveur" : "dans ce navigateur"}` : (storeMode === "server" ? "Aucune carte enregistrée sur le serveur." : "Aucune carte enregistrée dans ce navigateur.");
+  $("#find").hidden = n < 2;
+}
+async function saveCards(){
+  const list = cards.filter(c => !c.example).sort((a,b) => a.n - b.n).map(({n,cfg,nom,fin,device,created}) => ({n,cfg,nom,fin,device,created}));
+  try {
+    if(storeMode === "server"){
+      const r = await fetch("api/cards", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(list)});
+      if(!r.ok) throw new Error(r.status);
+    } else localStorage.setItem("cartesVpnListe", JSON.stringify(list));
+    storeMsg();
+  } catch { $("#store").textContent = "Attention : les cartes n'ont pas pu être enregistrées."; }
+}
+$("#find").addEventListener("input", e => {
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll(".card").forEach(el => { const c = el._card; if(c) el.hidden = !!q && !((c.nom || "").toLowerCase().includes(q) || String(c.n).padStart(3,"0").includes(q.replace(/\D/g,"") || "x")); });
+});
+
+function add(cfg, nom, fin, contact, example=false, num=0, device="tous", created=0){
   if(num) count = Math.max(count, num);
-  const c = { device, n: example ? 1 : (num || ++count), cfg, nom, fin, contact, example, p: parse(cfg) };
+  const c = { device, n: example ? 1 : (num || ++count), cfg, nom, fin, contact, example, created: created || Date.now(), p: parse(cfg) };
   if(!example) { cards = cards.filter(x => !x.example); sheet.querySelectorAll(".card").forEach(n => { if(n.querySelector(".ex")) n.remove(); }); }
   cards.push(c); render(); sheet.prepend(makeCard(c));
+  if(!example && !restoring) saveCards();
 }
 
 $("#f").addEventListener("submit", ev => {
@@ -490,8 +542,15 @@ $("#cfg").addEventListener("dragover", e => e.preventDefault());
 $("#cfg").addEventListener("drop", e => { if(e.dataTransfer.files.length){ e.preventDefault(); loadFile(e.dataTransfer.files[0]); } });
 
 render();
-if(typeof qrcode !== "undefined") add(EXAMPLE, "Alex (exemple)", "", "Sam", true);
-else window.addEventListener("load", () => { if(typeof qrcode !== "undefined") add(EXAMPLE, "Alex (exemple)", "", "Sam", true); });
+(async () => {
+  if(typeof qrcode === "undefined") await new Promise(r => window.addEventListener("load", r));
+  const saved = await loadStored();
+  restoring = true;
+  saved.filter(x => x && x.cfg).sort((a,b) => a.n - b.n).forEach(x => add(x.cfg, x.nom || "", x.fin || "", "", false, x.n, x.device || "tous", x.created));
+  restoring = false;
+  if(!cards.length && typeof qrcode !== "undefined") add(EXAMPLE, "Alex (exemple)", "", "Sam", true);
+  storeMsg();
+})();
 </script>
 
 </body>

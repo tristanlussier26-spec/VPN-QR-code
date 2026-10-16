@@ -8,7 +8,7 @@ Pensé pour un serveur [wg-easy](https://github.com/wg-easy/wg-easy), mais ça m
 
 ## Installer sur un Raspberry Pi (accès par IP)
 
-La page est un simple fichier HTML avec ses deux librairies dans `vendor/` : elle marche **sans Internet**, sur ton réseau local.
+Sur le Pi, un petit serveur Python (sans dépendance) sert la page et **enregistre les cartes** dans un fichier JSON. Tu les retrouves donc depuis n'importe quel appareil de ton réseau. Les librairies sont dans `vendor/` : pas besoin d'Internet.
 
 ### Option A : Docker
 
@@ -18,10 +18,9 @@ cd VPN-QR-code
 docker compose up -d --build
 ```
 
-Ouvre ensuite `http://IP-DU-PI:8080` (par exemple `http://192.168.1.50:8080`).
-Pour changer le port, modifie `8080:80` dans `docker-compose.yml`.
+Les cartes sont gardées dans `VPN-QR-code/data/cards.json`.
 
-### Option B : nginx, sans Docker
+### Option B : sans Docker (service systemd)
 
 ```bash
 git clone https://github.com/tristanlussier26-spec/VPN-QR-code.git
@@ -29,9 +28,11 @@ cd VPN-QR-code
 sudo ./install-pi.sh 8080
 ```
 
-Le script installe nginx, copie la page dans `/var/www/cartes-vpn` et affiche l'adresse à ouvrir.
+Les cartes sont gardées dans `/var/lib/cartes-vpn/cards.json`. Si tu avais l'ancienne version avec nginx, le script la retire tout seul.
 
-### Mettre à jour
+Ouvre ensuite `http://IP-DU-PI:8080`.
+
+### Mettre à jour (les cartes sont gardées)
 
 ```bash
 cd VPN-QR-code && git pull
@@ -41,7 +42,14 @@ sudo ./install-pi.sh 8080         # option B
 
 ### Sécurité
 
-N'ouvre pas ce port sur Internet. La page n'envoie rien à un serveur, mais elle n'a pas de mot de passe : garde-la sur ton réseau local (ou derrière ton VPN).
+Les cartes contiennent les clés privées WireGuard de tes amis. N'ouvre **pas** ce port sur Internet : la page n'a pas de mot de passe. Garde-la sur ton réseau local (ou accessible seulement par le VPN), et sauvegarde `cards.json` comme un fichier de mots de passe.
+
+## Cartes enregistrées
+
+- Chaque carte créée est enregistrée tout de suite : sur le serveur du Pi, ou dans le navigateur si la page est ouverte sans serveur (GitHub Pages, fichier local).
+- Tu les vois toutes à droite, avec une recherche par nom ou par numéro.
+- Pour chaque carte : PDF, fichier `.conf`, message texte à copier.
+- « Retirer » demande une confirmation, puis supprime la carte pour de bon.
 
 ## Personnaliser la carte
 
@@ -64,7 +72,7 @@ Pour retirer un accès, désactive ou supprime le client dans wg-easy.
 
 ## Technique
 
-Un seul fichier HTML, sans build ni base de données. Les librairies sont incluses dans `vendor/` (licences MIT, fichiers de licence à côté) :
+Un fichier HTML et un petit serveur Python (`server.py`, bibliothèque standard seulement), sans build ni base de données. Les librairies sont incluses dans `vendor/` (licences MIT, fichiers de licence à côté) :
 [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 et [jsPDF](https://github.com/parallax/jsPDF) 2.5.1.
 La police vient de Google Fonts quand Internet est disponible ; sinon, la police du système prend le relais.
 

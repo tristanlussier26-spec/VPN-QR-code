@@ -1,5 +1,8 @@
-# Sert la page avec nginx. Marche sur Raspberry Pi (arm64/armv7) et sur PC (amd64).
-FROM nginx:1.27-alpine
-COPY index.html /usr/share/nginx/html/index.html
-COPY vendor/ /usr/share/nginx/html/vendor/
+FROM python:3.12-alpine
+WORKDIR /app
+COPY index.html server.py ./
+COPY vendor/ ./vendor/
+ENV PORT=80 DATA_DIR=/data
+VOLUME /data
 EXPOSE 80
+CMD ["python3", "server.py"]
